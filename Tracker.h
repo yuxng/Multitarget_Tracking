@@ -41,10 +41,10 @@ public:
 	float* hungarian(std::vector<BBOX> bboxes_target, std::vector<BBOX> bboxes);
 	void perturb_box(BBOX &bbox);
 	SAMPLE get_initial_sample();
-	SAMPLE add_target(SAMPLE sample, std::vector<BBOX> &bboxes, float &acceptance_ratio);
-	SAMPLE delete_target(SAMPLE sample, std::vector<BBOX> &bboxes, float &acceptance_ratio);
-	SAMPLE stay_target(SAMPLE sample, std::vector<BBOX> &bboxes, float &acceptance_ratio);
-	SAMPLE leave_target(SAMPLE sample, std::vector<BBOX> &bboxes, float &acceptance_ratio);
+	SAMPLE add_target(SAMPLE sample, std::vector<BBOX> bboxes, std::size_t &bbox_id, float &acceptance_ratio);
+	SAMPLE delete_target(SAMPLE sample, std::vector<BBOX> bboxes, std::size_t &bbox_id, float &acceptance_ratio);
+	SAMPLE stay_target(SAMPLE sample, std::vector<BBOX> bboxes, std::size_t &bbox_id, float &acceptance_ratio);
+	SAMPLE leave_target(SAMPLE sample, std::vector<BBOX> bboxes, std::size_t &bbox_id, float &acceptance_ratio);
 	SAMPLE update_target(SAMPLE sample, cv::Mat confidence, float &acceptance_ratio);
 
 	void compute_motion_prior(SAMPLE sample);

@@ -62,7 +62,7 @@ void Tracker::initialize_tracker()
 	confidence_path_iterator_ = confidence_paths_.begin();
 
 	// set parameters
-	parameter_.num_sample = 3000;
+	parameter_.num_sample = 30;
 
 	parameter_.min_overlap = 0.25;
 
@@ -328,6 +328,7 @@ void Tracker::run_rjmcmc_sampling(std::vector<BBOX> bboxes, cv::Mat confidence)
 		std::cout << "sample " << i << std::endl;
 		// determine the move type
 		MOVE_TYPE move;
+		std::size_t bbox_id = 0;
 		double val = rng_.uniform((double)0, (double)1);
 		float acceptance_ratio = 0;
 
@@ -336,35 +337,35 @@ void Tracker::run_rjmcmc_sampling(std::vector<BBOX> bboxes, cv::Mat confidence)
 			// add an object
 			std::cout << "Add move" << std::endl;
 			move = MOVE_ADD;
-			sample = add_target(sample_prev, bboxes_add, acceptance_ratio);
+			sample = add_target(sample_prev, bboxes_add, bbox_id, acceptance_ratio);
 		}
 		else if((val -= parameter_.prob_moves[MOVE_DELETE]) < 0)
 		{
 			// delete an object
 			std::cout << "Delete move" << std::endl;
 			move = MOVE_DELETE;
-			sample = delete_target(sample_prev, bboxes_add, acceptance_ratio);
+			sample = delete_target(sample_prev, bboxes_add, bbox_id, acceptance_ratio);
 		}
 		else if((val -= parameter_.prob_moves[MOVE_STAY]) < 0)
 		{
 			// stay move
 			std::cout << "Stay move" << std::endl;
 			move = MOVE_STAY;
-			sample = stay_target(sample_prev, bboxes_stay, acceptance_ratio);
+			sample = stay_target(sample_prev, bboxes_stay, bbox_id, acceptance_ratio);
 		}
 		else if((val -= parameter_.prob_moves[MOVE_LEAVE]) < 0)
 		{
 			// leave move
 			std::cout << "Leave move" << std::endl;
 			move = MOVE_LEAVE;
-			sample = leave_target(sample_prev, bboxes_stay, acceptance_ratio);
+			sample = leave_target(sample_prev, bboxes_stay, bbox_id, acceptance_ratio);
 		}
 		else if((val -= parameter_.prob_moves[MOVE_UPDATE]) < 0)
 		{
 			// update move
 			std::cout << "Update move" << std::endl;
 			move = MOVE_UPDATE;
-			update_target(sample_prev, confidence, acceptance_ratio);
+			sample = update_target(sample_prev, confidence, acceptance_ratio);
 		}
 		else
 		{
@@ -375,6 +376,24 @@ void Tracker::run_rjmcmc_sampling(std::vector<BBOX> bboxes, cv::Mat confidence)
 		val = rng_.uniform((double)0, (double)1);
 		if(acceptance_ratio > val)	// accept the sample
 		{
+			// update the bboxes
+			switch(move)
+			{
+			case MOVE_ADD:
+				bboxes_add.erase(bboxes_add.begin() + bbox_id);
+				break;
+			case MOVE_DELETE:
+				bboxes_add.push_back(sample_prev.bboxes[bbox_id]);
+				break;
+			case MOVE_STAY:
+				bboxes_stay.erase(bboxes_stay.begin() + bbox_id);
+				break;
+			case MOVE_LEAVE:
+				bboxes_stay.push_back(sample_prev.bboxes[bbox_id]);
+				break;
+			}
+
+			// store and update the sample
 			samples.push_back(sample);
 			sample_prev = sample;
 
@@ -414,7 +433,7 @@ float* Tracker::hungarian(std::vector<BBOX> bboxes_target, std::vector<BBOX> bbo
 
 
 // add move
-SAMPLE Tracker::add_target(SAMPLE sample_prev, std::vector<BBOX> &bboxes, float &acceptance_ratio)
+SAMPLE Tracker::add_target(SAMPLE sample_prev, std::vector<BBOX> bboxes, std::size_t &bbox_id, float &acceptance_ratio)
 {
 	if(bboxes.size() == 0)
 	{
@@ -433,15 +452,15 @@ SAMPLE Tracker::add_target(SAMPLE sample_prev, std::vector<BBOX> &bboxes, float 
 	float num_delete = num_added_ - num_add + 1;
 	acceptance_ratio = bbox.score * parameter_.prob_moves[MOVE_DELETE] * num_add / num_delete;
 
-	// remove the added object from the set
-	bboxes.erase(bboxes.begin() + idx);
+	// return the object id added
+	bbox_id = idx;
 
 	return sample;
 }
 
 
 // delete move
-SAMPLE Tracker::delete_target(SAMPLE sample_prev, std::vector<BBOX> &bboxes, float &acceptance_ratio)
+SAMPLE Tracker::delete_target(SAMPLE sample_prev, std::vector<BBOX> bboxes, std::size_t &bbox_id, float &acceptance_ratio)
 {
 	std::cout << bboxes.size() << " " << num_added_ << std::endl;
 	if(bboxes.size() == (std::size_t)num_added_)
@@ -469,11 +488,11 @@ SAMPLE Tracker::delete_target(SAMPLE sample_prev, std::vector<BBOX> &bboxes, flo
 	BBOX bbox = sample.bboxes[index];
 	sample.bboxes.erase(sample.bboxes.begin() + index);
 
-	// add the object to the added object list
-	bboxes.push_back(bbox);
+	// return the object id to be deleted
+	bbox_id = index;
 
 	// compute acceptance ratio
-	float num_add = bboxes.size();
+	float num_add = bboxes.size() + 1;
 	acceptance_ratio = (1 / bbox.score) * (1 / parameter_.prob_moves[MOVE_DELETE]) * (float)num_delete / num_add;
 
 	return sample;
@@ -481,7 +500,7 @@ SAMPLE Tracker::delete_target(SAMPLE sample_prev, std::vector<BBOX> &bboxes, flo
 
 
 // stay move
-SAMPLE Tracker::stay_target(SAMPLE sample_prev, std::vector<BBOX> &bboxes, float &acceptance_ratio)
+SAMPLE Tracker::stay_target(SAMPLE sample_prev, std::vector<BBOX> bboxes, std::size_t &bbox_id, float &acceptance_ratio)
 {
 	if(bboxes.size() == 0)
 	{
@@ -505,15 +524,15 @@ SAMPLE Tracker::stay_target(SAMPLE sample_prev, std::vector<BBOX> &bboxes, float
 	float num_leave = num_stayed_ - num_stay + 1;
 	acceptance_ratio = bbox.score * motion_ratio * move_ratio * num_stay / (num_leave * prob);
 
-	// remove the stayed object from the set
-	bboxes.erase(bboxes.begin() + idx);
+	// return the object id stayed
+	bbox_id = idx;
 
 	return sample;
 }
 
 
 // leave move
-SAMPLE Tracker::leave_target(SAMPLE sample_prev, std::vector<BBOX> &bboxes, float &acceptance_ratio)
+SAMPLE Tracker::leave_target(SAMPLE sample_prev, std::vector<BBOX> bboxes, std::size_t &bbox_id, float &acceptance_ratio)
 {
 	if(bboxes.size() == (std::size_t)num_stayed_)
 	{
@@ -539,17 +558,17 @@ SAMPLE Tracker::leave_target(SAMPLE sample_prev, std::vector<BBOX> &bboxes, floa
 	}
 	// remove the target
 	BBOX bbox = sample.bboxes[index];
-	std::cout << "leave target " << index << " size of sample boxes " << sample.bboxes.size() << std::endl;
+	std::cout << "leave target " << index << " score " << bbox.score << " size of sample boxes " << sample.bboxes.size() << std::endl;
 	sample.bboxes.erase(sample.bboxes.begin() + index);
 
-	// add the object to the stayed object list
-	bboxes.push_back(bbox);
+	// return the object id left
+	bbox_id = index;
 
 	// compute acceptance ratio
 	float prob = get_sample_box(bbox.id, bbox);
 	float motion_ratio = compute_motion_ratio(bbox, MOVE_LEAVE);
 	float move_ratio = parameter_.prob_moves[MOVE_STAY] / parameter_.prob_moves[MOVE_LEAVE];
-	float num_stay = bboxes.size();
+	float num_stay = bboxes.size() + 1;
 	acceptance_ratio = (1 / bbox.score) * motion_ratio * move_ratio * num_leave * prob / num_stay;
 
 	return sample;
@@ -577,8 +596,21 @@ SAMPLE Tracker::update_target(SAMPLE sample_prev, cv::Mat confidence, float &acc
 	else
 	{
 		bbox.score = exp(confidence.at<float>(y, x));
+
+		// backup the motion prior
+		float *motion_prior = new float[samples_.size()];
+		for(std::size_t i = 0; i < samples_.size(); i++)
+			motion_prior[i] = samples_[i].motion_prior;
+
 		float motion_ratio_leave = compute_motion_ratio(sample_prev.bboxes[idx], MOVE_LEAVE);
+		update_motion_prior(MOVE_LEAVE);
 		float motion_ratio_stay = compute_motion_ratio(bbox, MOVE_STAY);
+
+		// restore the origin motion prior
+		for(std::size_t i = 0; i < samples_.size(); i++)
+			samples_[i].motion_prior = motion_prior[i];
+		delete motion_prior;
+
 		acceptance_ratio = (bbox.score / sample_prev.bboxes[idx].score) * motion_ratio_leave * motion_ratio_stay;
 
 		SAMPLE sample = sample_prev;
