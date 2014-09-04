@@ -20,37 +20,6 @@ Target::~Target() {
 	// TODO Auto-generated destructor stub
 }
 
-int Target::get_id()
-{
-	return id_;
-}
-
-BBOX Target::get_bbox()
-{
-	return bbox_;
-}
-
-TARGET_STATUS Target::get_status()
-{
-	return status_;
-}
-
-float Target::get_velocity_x()
-{
-	return vx_;
-}
-
-float Target::get_velocity_y()
-{
-	return vy_;
-}
-
-
-void Target::add_sample_bbox(BBOX bbox)
-{
-	sample_bboxes_.push_back(bbox);
-}
-
 
 // sample a new location of the target
 float Target::sample_location(float sigma_x, float sigma_y, BBOX &bbox_sample)

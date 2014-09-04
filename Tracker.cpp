@@ -62,7 +62,7 @@ void Tracker::initialize_tracker()
 	confidence_path_iterator_ = confidence_paths_.begin();
 
 	// set parameters
-	parameter_.num_sample = 30;
+	parameter_.num_sample = 3000;
 
 	parameter_.min_overlap = 0.25;
 
@@ -114,7 +114,7 @@ void Tracker::process_frame()
 			bboxes[i].id = target_id_;
 			bboxes[i].status = BOX_TRACKED;
 			Target target(target_id_, bboxes[i], ACTIVE);
-			target.add_sample_bbox(bboxes[i]);
+			target.sample_bboxes_.push_back(bboxes[i]);
 			targets_.push_back(target);
 			target_id_++;
 		}
@@ -134,7 +134,7 @@ void Tracker::process_frame()
 
 	for(std::size_t i = 0; i < targets_.size(); i++)
 	{
-		BBOX bbox = targets_[i].get_bbox();
+		BBOX bbox = targets_[i].bbox_;
 		cv::rectangle(image, cv::Point(bbox.x1, bbox.y1), cv::Point(bbox.x2, bbox.y2), cv::Scalar(0, 255, 0), 2);
 	}
 
@@ -243,7 +243,7 @@ bool Tracker::is_empty_target()
 
 	for(std::size_t i = 0; i < targets_.size(); i++)
 	{
-		if(targets_[i].get_status() != INACTIVE)
+		if(targets_[i].status_ != INACTIVE)
 		{
 			is_empty = false;
 			break;
@@ -264,9 +264,9 @@ SAMPLE Tracker::get_initial_sample()
 	// apply motion model to each target
 	for(std::size_t i = 0; i < targets_.size(); i++)
 	{
-		bbox = targets_[i].get_bbox();
-		vx = targets_[i].get_velocity_x();
-		vy = targets_[i].get_velocity_y();
+		bbox = targets_[i].bbox_;
+		vx = targets_[i].vx_;
+		vy = targets_[i].vy_;
 		cx = (bbox.x1 + bbox.x2) / 2 + vx;	// constant velocity motion
 		cy = (bbox.y1 + bbox.y2) / 2 + vy;
 		w = bbox.x2 - bbox.x1;
@@ -298,7 +298,7 @@ void Tracker::run_rjmcmc_sampling(std::vector<BBOX> bboxes, cv::Mat confidence)
 		int index = assignment[i];
 		if(index != -1)
 		{
-			bboxes[index].id = targets_[i].get_id();
+			bboxes[index].id = targets_[i].id_;
 			bboxes[index].status = BOX_TRACKED;
 		}
 	}
@@ -402,6 +402,63 @@ void Tracker::run_rjmcmc_sampling(std::vector<BBOX> bboxes, cv::Mat confidence)
 			std::cout << "accept " << acceptance_ratio << std::endl;
 		}
 		std::cout << "number of targets " << sample_prev.bboxes.size() << std::endl;
+	}
+	samples_.clear();
+	samples_ = samples;
+
+	// extend the target set
+	int num_target = targets_.size();
+	for(int i = num_target; i < target_id_; i++)
+	{
+		BBOX *bbox = new BBOX[1];
+		bbox->id = i;
+		bbox->status = BOX_TRACKED;
+		Target target(i, *bbox, ACTIVE);
+		targets_.push_back(target);
+	}
+	std::cout << targets_.size() << " targets after sampling" << std::endl;
+
+	// clean up the target samples
+	for(std::size_t i = 0; i < targets_.size(); i++)
+		targets_[i].sample_bboxes_.clear();
+
+	std::cout << samples_.size() << " samples after sampling" << std::endl;
+	// extract the samples for the  targets
+	for(std::size_t i = 0; i < samples_.size(); i++)
+	{
+		for(std::size_t j = 0; j < samples_[i].bboxes.size(); j++)
+		{
+			BBOX bbox = samples_[i].bboxes[j];
+			targets_[bbox.id].sample_bboxes_.push_back(bbox);
+		}
+	}
+
+	// compute the mean sample location for each target
+	for(std::size_t i = 0; i < targets_.size(); i++)
+	{
+		float cx = 0, cy = 0, w = 0, h = 0, score = 0;
+		std::size_t num = targets_[i].sample_bboxes_.size();
+		for(std::size_t j = 0; j < num; j++)
+		{
+			BBOX bbox = targets_[i].sample_bboxes_[j];
+			cx += (bbox.x1 + bbox.x2) / 2;
+			cy += (bbox.y1 + bbox.y2) / 2;
+			w += bbox.x2 - bbox.x1;
+			h += bbox.y2 - bbox.y1;
+			score += bbox.score;
+		}
+		if(num > 0)
+		{
+			cx /= num;
+			cy /= num;
+			w /= num;
+			h /= num;
+		}
+
+		targets_[i].bbox_.x1 = cx - w/2;
+		targets_[i].bbox_.x2 = cx + w/2;
+		targets_[i].bbox_.y1 = cy - h/2;
+		targets_[i].bbox_.y2 = cy + h/2;
 	}
 }
 
@@ -578,6 +635,12 @@ SAMPLE Tracker::leave_target(SAMPLE sample_prev, std::vector<BBOX> bboxes, std::
 // update move
 SAMPLE Tracker::update_target(SAMPLE sample_prev, cv::Mat confidence, float &acceptance_ratio)
 {
+	if (sample_prev.bboxes.size() == 0)
+	{
+		acceptance_ratio = -1;
+		return sample_prev;
+	}
+
 	// randomly select one object to update
 	std::size_t idx = floor(rng_.uniform((double)0.0, (double)sample_prev.bboxes.size()));
 	BBOX bbox = sample_prev.bboxes[idx];
@@ -776,8 +839,8 @@ float Tracker::get_velocity_x(int id)
 	float v = 0;
 	for(std::size_t i = 0; i < targets_.size(); i++)
 	{
-		if(id == targets_[i].get_id())
-			v = targets_[i].get_velocity_x();
+		if(id == targets_[i].id_)
+			v = targets_[i].vx_;
 	}
 
 	return v;
@@ -790,8 +853,8 @@ float Tracker::get_velocity_y(int id)
 	float v = 0;
 	for(std::size_t i = 0; i < targets_.size(); i++)
 	{
-		if(id == targets_[i].get_id())
-			v = targets_[i].get_velocity_y();
+		if(id == targets_[i].id_)
+			v = targets_[i].vy_;
 	}
 
 	return v;
@@ -805,7 +868,7 @@ float Tracker::get_sample_box(int id, BBOX &bbox)
 
 	for(std::size_t i = 0; i < targets_.size(); i++)
 	{
-		if(id == targets_[i].get_id())
+		if(id == targets_[i].id_)
 			prob = targets_[i].sample_location(parameter_.sigma_det_x, parameter_.sigma_det_y, bbox);
 	}
 

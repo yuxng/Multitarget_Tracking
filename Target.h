@@ -11,16 +11,11 @@
 #include "common.h"
 
 class Target {
+	friend class Tracker;
 public:
 	Target(int id, BBOX bbox, TARGET_STATUS status);
 	virtual ~Target();
 
-	int get_id();
-	BBOX get_bbox();
-	TARGET_STATUS get_status();
-	float get_velocity_x();
-	float get_velocity_y();
-	void add_sample_bbox(BBOX bbox);
 	float sample_location(float sigma_x, float sigma_y, BBOX &bbox_sample);
 
 private:
