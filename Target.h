@@ -13,20 +13,29 @@
 class Target {
 	friend class Tracker;
 public:
-	Target(int id, BBOX bbox, TARGET_STATUS status);
+	Target();
 	virtual ~Target();
 
-	float sample_location(float sigma_x, float sigma_y, BBOX &bbox_sample);
+	Target apply_motion_model();
 
 private:
-	int id_;
+	int id_;	// target id
+	float cx_;	// x coordinate of center location
+	float cy_;  // y coordinate of center location
+	float width_;	// 2D width of the target
+	float height_;	// 2D height of the target
+	float score_;	// confidence score of the target
 	float vx_;	// velocity in x-axis
 	float vy_;	// velocity in y-axis
-	BBOX bbox_;
 	TARGET_STATUS status_;
-	std::vector<BBOX> sample_bboxes_;
 
-	cv::RNG rng_;	// random number generator
+	std::vector<SAMPLE_INDEX> sample_indexes_;
+
+	float motion_prior_;
+	float motion_prior_new_;
+
+	int count_active_;
+	int count_lost_;
 };
 
 #endif /* TARGET_H_ */

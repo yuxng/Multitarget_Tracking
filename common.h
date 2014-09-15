@@ -19,28 +19,11 @@
 
 typedef enum
 {
-	BOX_ADDED,
-	BOX_TRACKED
-}BOX_STATUS;
-
-
-typedef struct bbox
-{
-	int id;
-	float x1;
-	float y1;
-	float x2;
-	float y2;
-	float score;
-	BOX_STATUS status;
-}BBOX;
-
-typedef enum
-{
-	ACTIVE,
-	INACTIVE,
-	TRACKED,
-	LOST
+	TARGET_ADDED,
+	TARGET_ACTIVE,
+	TARGET_INACTIVE,
+	TARGET_TRACKED,
+	TARGET_LOST
 }TARGET_STATUS;
 
 
@@ -54,14 +37,15 @@ typedef enum
 	MOVE_UPDATE
 }MOVE_TYPE;
 
-
+class Target;
 typedef struct sample
 {
 	float motion_prior;
 	float motion_prior_new;
-	std::vector<BBOX> bboxes;
+	std::vector<Target> targets;
 }SAMPLE;
 
+typedef std::pair<std::size_t, std::size_t> SAMPLE_INDEX;
 
 typedef struct parameter
 {
@@ -76,9 +60,14 @@ typedef struct parameter
 	// standard deviation to perturb detections
 	float sigma_det_x;
 	float sigma_det_y;
+
+	// detection threshold
+	float det_threshold;
+
+	int num_active2tracked;
+	int num_lost2inactive;
 }PARAMETER;
 
-float box_overlap(BBOX b1, BBOX b2);
 float log_gaussian_prob(float x, float m, float std);
 void assignmentoptimal(float *assignment, float *cost, float *distMatrixIn, int nOfRows, int nOfColumns, float infval);
 

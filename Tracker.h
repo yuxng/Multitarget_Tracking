@@ -23,7 +23,7 @@ public:
 
 	void read_image_paths(const char* filename);
 	void read_confidence_paths(const char* filename);
-	bool read_confidence_file(const std::string filename, std::vector<BBOX> &bboxes, cv::Mat &confidence);
+	bool read_confidence_file(const std::string filename, std::vector<Target> &targets, cv::Mat &confidence);
 
 	bool is_the_end();
 	bool is_empty_target();
@@ -32,24 +32,24 @@ public:
 	void process_frame();
 	void next_frame();
 
-	float get_velocity_x(int id);
-	float get_velocity_y(int id);
-	float get_sample_box(int id, BBOX &bbox);
+	float get_sample_target(int id, Target &target);
+	float sample_location(Target target, float sigma_x, float sigma_y, Target &target_sample);
+	float target_overlap(Target t1, Target t2);
 
 	// sampling related
-	void run_rjmcmc_sampling(std::vector<BBOX> bboxes, cv::Mat confidence);
-	float* hungarian(std::vector<BBOX> bboxes_target, std::vector<BBOX> bboxes);
-	void perturb_box(BBOX &bbox);
+	void run_rjmcmc_sampling(std::vector<Target> targets, cv::Mat confidence);
+	float* hungarian(std::vector<Target> bboxes_target, std::vector<Target> bboxes);
+	void perturb_target(Target &target);
 	SAMPLE get_initial_sample();
-	SAMPLE add_target(SAMPLE sample, std::vector<BBOX> bboxes, std::size_t &bbox_id, float &acceptance_ratio);
-	SAMPLE delete_target(SAMPLE sample, std::vector<BBOX> bboxes, std::size_t &bbox_id, float &acceptance_ratio);
-	SAMPLE stay_target(SAMPLE sample, std::vector<BBOX> bboxes, std::size_t &bbox_id, float &acceptance_ratio);
-	SAMPLE leave_target(SAMPLE sample, std::vector<BBOX> bboxes, std::size_t &bbox_id, float &acceptance_ratio);
-	SAMPLE update_target(SAMPLE sample, cv::Mat confidence, float &acceptance_ratio);
+	SAMPLE add_target(SAMPLE sample, std::vector<Target> targets, std::size_t &target_id, float &acceptance_ratio);
+	SAMPLE delete_target(SAMPLE sample, std::vector<Target> targets, std::size_t &target_id, float &acceptance_ratio);
+	SAMPLE stay_target(SAMPLE sample, std::vector<Target> targets, std::size_t &target_id, float &acceptance_ratio);
+	SAMPLE leave_target(SAMPLE sample, std::vector<Target> targets, std::size_t &target_id, float &acceptance_ratio);
+	SAMPLE update_target(SAMPLE sample, std::vector<Target> targets, cv::Mat confidence, float &acceptance_ratio);
 
 	void compute_motion_prior(SAMPLE sample);
 	void update_motion_prior(MOVE_TYPE move);
-	float compute_motion_ratio(BBOX bbox, MOVE_TYPE move);
+	float compute_motion_ratio(Target target, MOVE_TYPE move);
 
 private:
 	std::vector<std::string> image_paths_;
