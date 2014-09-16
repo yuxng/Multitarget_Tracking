@@ -26,4 +26,6 @@ int main(int argc, char** argv)
 		cv::waitKey(1);
 		tracker.next_frame();
 	}
+
+	tracker.terminate_tracker();
 }

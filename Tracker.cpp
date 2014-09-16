@@ -79,6 +79,31 @@ void Tracker::initialize_tracker()
 	parameter_.frac_lost2inactive = 0.1;
 
 	parameter_.fix_detection_size = 0;
+
+	parameter_.dir_detection = "cache/detection/";
+	parameter_.dir_tracking = "cache/tracking/";
+	parameter_.filename = "cache/results.txt";
+
+	// open result file
+	result_file_.open(parameter_.filename.c_str());
+	result_file_ << "frame_id, target_id, target_status, center_x, center_y, width, height, score" << std::endl;
+
+	// clean cache
+	std::string cmd = "rm " + parameter_.dir_detection + "*";
+	std::system(cmd.c_str());
+	cmd = "rm " + parameter_.dir_tracking + "*";
+	std::system(cmd.c_str());
+}
+
+
+// terminate tracker
+void Tracker::terminate_tracker()
+{
+	result_file_.close();
+	image_paths_.clear();
+	confidence_paths_.clear();
+	targets_.clear();
+	samples_.clear();
 }
 
 
@@ -240,11 +265,17 @@ void Tracker::process_frame()
 		cv::rectangle(image_detection, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(0, 255, 0), 2);
 
 		std::ostringstream text;
-		text << i;
-		cv::putText(image_detection, text.str(), cv::Point(x1, y1), cv::FONT_HERSHEY_SIMPLEX, .4 * image.cols / 500, cv::Scalar(0, 0, 255), image.cols / 500);
+		text << "D" << i << ", " << std::setprecision(2) << targets[i].score_;
+		cv::putText(image_detection, text.str(), cv::Point(x1, y1), cv::FONT_HERSHEY_SIMPLEX, .4 * image.cols / 500, cv::Scalar(0, 255, 0), image.cols / 500);
 	}
 	cv::namedWindow("Detection", cv::WINDOW_AUTOSIZE);  // Create a window for display.
 	cv::imshow("Detection", image_detection);  // Show our image inside it.
+
+	// save detection image
+	std::ostringstream filename;
+	filename << std::setfill('0');
+	filename << parameter_.dir_detection << std::setw(6) << image_path_iterator_ - image_paths_.begin() << ".jpg";
+	cv::imwrite(filename.str(), image_detection);
 
 	// show tracking results
 	cv::Mat image_tracking = image.clone();
@@ -263,11 +294,28 @@ void Tracker::process_frame()
 			cv::rectangle(image_tracking, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(0, 0, 255), 2);
 
 		std::ostringstream text;
-		text << targets_[i].id_;
-		cv::putText(image_tracking, text.str(), cv::Point(x1, y1), cv::FONT_HERSHEY_SIMPLEX, .4 * image.cols / 500, cv::Scalar(0, 0, 255), image.cols / 500);
+		text << "T" << targets_[i].id_ << ", " << std::setprecision(2) << targets_[i].score_;
+		cv::putText(image_tracking, text.str(), cv::Point(x1, y1), cv::FONT_HERSHEY_SIMPLEX, .4 * image.cols / 500, color, image.cols / 500);
 	}
 	cv::namedWindow("Tracking", cv::WINDOW_AUTOSIZE);  // Create a window for display.
 	cv::imshow("Tracking", image_tracking);  // Show our image inside it.
+
+	// save tracking image
+	filename.str("");
+	filename.clear();
+	filename << std::setfill('0');
+	filename << parameter_.dir_tracking << std::setw(6) << image_path_iterator_ - image_paths_.begin() << ".jpg";
+	cv::imwrite(filename.str(), image_tracking);
+
+	// write tracking results
+	int frame_id = image_path_iterator_ - image_paths_.begin();
+	for(std::size_t i = 0; i < targets_.size(); i++)
+	{
+		Target target = targets_[i];
+		if(target.status_ != TARGET_INACTIVE)
+			result_file_ << frame_id << " " << target.id_ << " " << target.status_ << " " << target.cx_ << " " << target.cy_ << " "
+				<< target.width_ << " " << target.height_ << " " << target.score_ << std::endl;
+	}
 
 	// clean up
 	if(success)

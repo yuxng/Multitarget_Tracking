@@ -11,6 +11,7 @@
 #include <vector>
 #include <string>
 #include <iostream>
+#include <iomanip>
 #include <fstream>
 #include <assert.h>
 #include "common.h"
@@ -29,6 +30,7 @@ public:
 	bool is_empty_target();
 
 	void initialize_tracker();
+	void terminate_tracker();
 	void process_frame();
 	void next_frame();
 
@@ -71,6 +73,8 @@ private:
 
 	PARAMETER parameter_;
 	cv::RNG rng_;	// random number generator
+
+	std::ofstream result_file_;
 };
 
 #endif /* TRACKER_H_ */

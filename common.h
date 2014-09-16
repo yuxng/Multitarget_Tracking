@@ -65,6 +65,10 @@ typedef struct parameter
 	float frac_lost2inactive;
 
 	float fix_detection_size;
+
+	std::string dir_detection;
+	std::string dir_tracking;
+	std::string filename;
 }PARAMETER;
 
 float log_gaussian_prob(float x, float m, float std);
