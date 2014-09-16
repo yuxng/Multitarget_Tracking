@@ -64,8 +64,6 @@ void Tracker::initialize_tracker()
 	// set parameters
 	parameter_.num_sample = 3000;
 
-	parameter_.min_overlap = 0.25;
-
 	parameter_.prob_moves[MOVE_ADD] = 0.1;
 	parameter_.prob_moves[MOVE_DELETE] = 0.1;
 	parameter_.prob_moves[MOVE_STAY] = 0.2;
@@ -78,7 +76,9 @@ void Tracker::initialize_tracker()
 	parameter_.det_threshold = 0;
 
 	parameter_.num_active2tracked = 2;
-	parameter_.num_lost2inactive = 3;
+	parameter_.frac_lost2inactive = 0.1;
+
+	parameter_.fix_detection_size = 0;
 }
 
 
@@ -135,12 +135,21 @@ bool Tracker::read_confidence_file(const std::string filename, std::vector<Targe
 			target.id_ = -1;
 			target.cx_ = det[0] + det[2] / 2;
 			target.cy_ = det[1] + det[3] / 2;
-			target.width_ = det[2];
-			target.height_ = det[3];
+			if(parameter_.fix_detection_size)
+			{
+				target.width_ = parameter_.fix_detection_size;
+				target.height_ = parameter_.fix_detection_size;
+			}
+			else
+			{
+				target.width_ = det[2];
+				target.height_ = det[3];
+			}
 			target.score_ = det[4] + 0.5;
 			target.status_ = TARGET_ADDED;
 			target.count_active_ = 0;
 			target.count_lost_ = 0;
+			target.count_tracked_ = 0;
 			targets.push_back(target);
 			std::cout << "Detection " << i << " score " << target.score_ << std::endl;
 		}
@@ -247,13 +256,14 @@ void Tracker::process_frame()
 		float x2 = targets_[i].cx_ + targets_[i].width_ / 2;
 		float y1 = targets_[i].cy_ - targets_[i].height_ / 2;
 		float y2 = targets_[i].cy_ + targets_[i].height_ / 2;
+		cv::Scalar color = cv::Scalar(((i * 120) % 256), ((i * 60) % 256), ((i * 30) % 256));
 		if(targets_[i].status_ == TARGET_TRACKED)
-			cv::rectangle(image_tracking, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(0, 255, 0), 2);
+			cv::rectangle(image_tracking, cv::Point(x1, y1), cv::Point(x2, y2), color, 2);
 		else
 			cv::rectangle(image_tracking, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(0, 0, 255), 2);
 
 		std::ostringstream text;
-		text << i;
+		text << targets_[i].id_;
 		cv::putText(image_tracking, text.str(), cv::Point(x1, y1), cv::FONT_HERSHEY_SIMPLEX, .4 * image.cols / 500, cv::Scalar(0, 0, 255), image.cols / 500);
 	}
 	cv::namedWindow("Tracking", cv::WINDOW_AUTOSIZE);  // Create a window for display.
@@ -335,13 +345,14 @@ void Tracker::run_rjmcmc_sampling(std::vector<Target> targets, cv::Mat confidenc
 			targets[index].id_ = sample_init.targets[i].id_;
 			sample_init.targets[i].cx_ = targets[index].cx_;
 			sample_init.targets[i].cy_ = targets[index].cy_;
-			sample_init.targets[i].width_ = targets[index].width_;
-			sample_init.targets[i].height_ = targets[index].height_;
+			sample_init.targets[i].width_ = 0.9*sample_init.targets[i].width_ + 0.1*targets[index].width_;
+			sample_init.targets[i].height_ = 0.9*sample_init.targets[i].height_ + 0.1*targets[index].height_;
 			sample_init.targets[i].score_ = targets[index].score_;
 			if((status == TARGET_ACTIVE && ++sample_init.targets[i].count_active_ >= parameter_.num_active2tracked) || status == TARGET_TRACKED || status == TARGET_LOST)
 			{
 				sample_init.targets[i].status_ = TARGET_TRACKED;
 				sample_init.targets[i].count_lost_ = 0;
+				sample_init.targets[i].count_tracked_++;
 				num_stayed_++;
 			}
 		}
@@ -351,8 +362,11 @@ void Tracker::run_rjmcmc_sampling(std::vector<Target> targets, cv::Mat confidenc
 				sample_init.targets[i].status_ = TARGET_INACTIVE;
 			else
 			{
-				if(++sample_init.targets[i].count_lost_ >= parameter_.num_lost2inactive)
+				if(++sample_init.targets[i].count_lost_ >= MAX(parameter_.frac_lost2inactive * sample_init.targets[i].count_tracked_, 2))
+				{
 					sample_init.targets[i].status_ = TARGET_INACTIVE;
+					std::cout << std::endl << "inactive " << sample_init.targets[i].count_lost_ << " " << sample_init.targets[i].count_tracked_ << std::endl;
+				}
 				else
 				{
 					sample_init.targets[i].status_ = TARGET_LOST;
@@ -374,7 +388,7 @@ void Tracker::run_rjmcmc_sampling(std::vector<Target> targets, cv::Mat confidenc
 		}
 	}
 	num_added_ = targets_add.size();		// total number of objects can be added
-	std::cout << num_added_ << " " << num_stayed_ << std::endl;
+	std::cout << num_added_ << " objects to be added, " << num_stayed_ << " objects to be stayed" << std::endl;
 
 	// generate samples
 	SAMPLE sample_prev = sample_init;
@@ -383,78 +397,107 @@ void Tracker::run_rjmcmc_sampling(std::vector<Target> targets, cv::Mat confidenc
 	std::vector<Target> targets_stay;
 	samples.push_back(sample_init);
 	compute_motion_prior(sample_init);
-	for(int i = 0; i < parameter_.num_sample; i++)
+	if(num_added_ > 0 || num_stayed_ > 0)
 	{
-		// determine the move type
-		MOVE_TYPE move;
-		std::size_t target_id = 0;
-		double val = rng_.uniform((double)0, (double)1);
-		float acceptance_ratio = 0;
+		for(int i = 0; i < parameter_.num_sample; i++)
+		{
+			// determine the move type
+			MOVE_TYPE move;
+			while(1)
+			{
+				double val = rng_.uniform((double)0, (double)1);
+				if((val -= parameter_.prob_moves[MOVE_ADD]) < 0)
+				{
+					// add an object
+					move = MOVE_ADD;
+					if(targets_add.size() > 0)
+						break;
+				}
+				else if((val -= parameter_.prob_moves[MOVE_DELETE]) < 0)
+				{
+					// delete an object
+					move = MOVE_DELETE;
+					if(targets_add.size() < (std::size_t)num_added_)
+						break;
+				}
+				else if((val -= parameter_.prob_moves[MOVE_STAY]) < 0)
+				{
+					// stay move
+					move = MOVE_STAY;
+					if(targets_stay.size() > 0)
+						break;
+				}
+				else if((val -= parameter_.prob_moves[MOVE_LEAVE]) < 0)
+				{
+					// leave move
+					move = MOVE_LEAVE;
+					if(targets_stay.size() < (std::size_t)num_stayed_)
+						break;
+				}
+				else if((val -= parameter_.prob_moves[MOVE_UPDATE]) < 0)
+				{
+					// update move
+					move = MOVE_UPDATE;
+					if(targets_stay.size() < (std::size_t)num_stayed_)
+						break;
+				}
+				else
+					assert(0);
+			}
 
-		if((val -= parameter_.prob_moves[MOVE_ADD]) < 0)
-		{
-			// add an object
-			move = MOVE_ADD;
-			sample = add_target(sample_prev, targets_add, target_id, acceptance_ratio);
-		}
-		else if((val -= parameter_.prob_moves[MOVE_DELETE]) < 0)
-		{
-			// delete an object
-			move = MOVE_DELETE;
-			sample = delete_target(sample_prev, targets_add, target_id, acceptance_ratio);
-		}
-		else if((val -= parameter_.prob_moves[MOVE_STAY]) < 0)
-		{
-			// stay move
-			move = MOVE_STAY;
-			sample = stay_target(sample_prev, targets_stay, target_id, acceptance_ratio);
-		}
-		else if((val -= parameter_.prob_moves[MOVE_LEAVE]) < 0)
-		{
-			// leave move
-			move = MOVE_LEAVE;
-			sample = leave_target(sample_prev, targets_stay, target_id, acceptance_ratio);
-		}
-		else if((val -= parameter_.prob_moves[MOVE_UPDATE]) < 0)
-		{
-			// update move
-			move = MOVE_UPDATE;
-			sample = update_target(sample_prev, targets_stay, confidence, acceptance_ratio);
-		}
-		else
-		{
-			assert(0);
-		}
+			std::size_t target_id = 0;
+			float acceptance_ratio = 0;
 
-		// determine to accept the new sample or not
-		val = rng_.uniform((double)0, (double)1);
-		if(acceptance_ratio > val)	// accept the sample
-		{
-			// update the add and stay sets
 			switch(move)
 			{
 			case MOVE_ADD:
-				targets_add.erase(targets_add.begin() + target_id);
+				sample = add_target(sample_prev, targets_add, target_id, acceptance_ratio);
 				break;
 			case MOVE_DELETE:
-				targets_add.push_back(sample_prev.targets[target_id]);
+				sample = delete_target(sample_prev, targets_add, target_id, acceptance_ratio);
 				break;
 			case MOVE_STAY:
-				targets_stay.erase(targets_stay.begin() + target_id);
+				sample = stay_target(sample_prev, targets_stay, target_id, acceptance_ratio);
 				break;
 			case MOVE_LEAVE:
-				targets_stay.push_back(sample_prev.targets[target_id]);
+				sample = leave_target(sample_prev, targets_stay, target_id, acceptance_ratio);
 				break;
 			case MOVE_UPDATE:
+				sample = update_target(sample_prev, targets_stay, confidence, acceptance_ratio);
 				break;
 			}
 
-			// store and update the sample
-			samples.push_back(sample);
-			sample_prev = sample;
+			// determine to accept the new sample or not
+			double val = rng_.uniform((double)0, (double)1);
+			if(acceptance_ratio > val)	// accept the sample
+			{
+				// update the add and stay sets
+				switch(move)
+				{
+				case MOVE_ADD:
+					targets_add.erase(targets_add.begin() + target_id);
+					break;
+				case MOVE_DELETE:
+					targets_add.push_back(sample_prev.targets[target_id]);
+					break;
+				case MOVE_STAY:
+					targets_stay.erase(targets_stay.begin() + target_id);
+					break;
+				case MOVE_LEAVE:
+					targets_stay.push_back(sample_prev.targets[target_id]);
+					break;
+				case MOVE_UPDATE:
+					break;
+				}
 
-			// update the motion prior
-			update_motion_prior(move);
+				// store and update the sample
+				samples.push_back(sample);
+				sample_prev = sample;
+
+				// update the motion prior
+				update_motion_prior(move);
+			}
+			// std::cout << "move type " << move << " acceptance ratio " << acceptance_ratio << " number of stay targets " << targets_stay.size() << std::endl;
 		}
 	}
 	samples_.clear();
@@ -491,7 +534,7 @@ void Tracker::run_rjmcmc_sampling(std::vector<Target> targets, cv::Mat confidenc
 	for(std::size_t i = 0; i < targets_.size(); i++)
 	{
 		TARGET_STATUS status = TARGET_INACTIVE;
-		float cx = 0, cy = 0, w = 0, h = 0, score = 0, vx = 0, vy = 0, count_active, count_lost;
+		float cx = 0, cy = 0, w = 0, h = 0, score = 0, vx = 0, vy = 0, count_active = 0, count_lost = 0, count_tracked = 0;
 		std::size_t num = targets_[i].sample_indexes_.size();
 
 		for(std::size_t j = 0; j < num; j++)
@@ -506,6 +549,7 @@ void Tracker::run_rjmcmc_sampling(std::vector<Target> targets, cv::Mat confidenc
 			status = target.status_;
 			count_active = target.count_active_;
 			count_lost = target.count_lost_;
+			count_tracked = target.count_tracked_;
 		}
 		if(num > 0)
 		{
@@ -514,10 +558,10 @@ void Tracker::run_rjmcmc_sampling(std::vector<Target> targets, cv::Mat confidenc
 			w /= num;
 			h /= num;
 			score /= num;
-			if(status == TARGET_TRACKED)
+			if(status == TARGET_TRACKED || status == TARGET_LOST)
 			{
-				vx = cx - targets_[i].cx_;
-				vy = cy - targets_[i].cy_;
+				vx = 0.5*targets_[i].vx_ + 0.5*(cx - targets_[i].cx_);
+				vy = 0.5*targets_[i].vy_ + 0.5*(cy - targets_[i].cy_);
 			}
 			else if(status == TARGET_ADDED)
 				status = TARGET_ACTIVE;
@@ -533,15 +577,18 @@ void Tracker::run_rjmcmc_sampling(std::vector<Target> targets, cv::Mat confidenc
 		targets_[i].status_ = status;
 		targets_[i].count_active_ = count_active;
 		targets_[i].count_lost_ = count_lost;
+		targets_[i].count_tracked_ = count_tracked;
 
-		std::cout << "target " << i << " " << num << " samples, status " << status << " score " << score << " vx " << vx << " vy " << vy << std::endl;
+		if(status != TARGET_INACTIVE)
+			std::cout << "target " << i << " " << num << " samples, status " << status << " score " << score
+				<< " vx " << vx << " vy " << vy << " num tracked " << count_tracked << " num lost " << count_lost << std::endl;
 	}
 }
 
 // Hungarian algorithm for data association
 float* Tracker::hungarian(std::vector<Target> bboxes_target, std::vector<Target> bboxes)
 {
-	float overlap, dis, cost;
+	float dis, cost;
 	float *assign = new float [bboxes_target.size()];
 	float *distMat = new float [bboxes_target.size() * bboxes.size()];
 
@@ -549,11 +596,9 @@ float* Tracker::hungarian(std::vector<Target> bboxes_target, std::vector<Target>
 	{
 		for(std::size_t j = 0; j < bboxes.size(); j++)
 		{
-			overlap = target_overlap(bboxes_target[i], bboxes[j]);
-			if(overlap < parameter_.min_overlap)
+			dis = target_distance(bboxes_target[i], bboxes[j]);
+			if(dis > bboxes_target[i].width_)	// thresholding
 				dis = PLUS_INFINITY;
-			else
-				dis = 1 - overlap;
 			distMat[i + bboxes_target.size() * j] = dis;
 		}
 	}
@@ -584,6 +629,13 @@ float Tracker::target_overlap(Target t1, Target t2)
 	}
 
 	return overlap;
+}
+
+
+// compute bounding box overlap
+float Tracker::target_distance(Target t1, Target t2)
+{
+	return sqrt((t1.cx_ - t2.cx_) * (t1.cx_ - t2.cx_) + (t1.cy_ - t2.cy_) * (t1.cy_ - t2.cy_));
 }
 
 
@@ -774,7 +826,6 @@ SAMPLE Tracker::update_target(SAMPLE sample_prev, std::vector<Target> targets, c
 		acceptance_ratio = (target.score_ / sample_prev.targets[index].score_) * motion_ratio;
 
 		sample.targets[index] = target;
-
 		return sample;
 	}
 }
@@ -786,16 +837,19 @@ void Tracker::perturb_target(Target &target)
 	// perturb the bounding box center
 	target.cx_ += rng_.gaussian(parameter_.sigma_det_x * target.width_);
 	target.cy_ += rng_.gaussian(parameter_.sigma_det_y * target.height_);
+	target.width_ += rng_.gaussian(parameter_.sigma_det_x * target.width_);
+	target.height_ += rng_.gaussian(parameter_.sigma_det_y * target.height_);
 }
 
 
+// compute motion prior in log space
 void Tracker::compute_motion_prior(SAMPLE sample)
 {
 	std::vector<Target> targets = sample.targets;
 
 	for(std::size_t i = 0; i < samples_.size(); i++)
 	{
-		float prior = 1;
+		float prior = 0;
 		int count = 0;
 		std::vector<Target> targets_prev = samples_[i].targets;
 
@@ -810,20 +864,22 @@ void Tracker::compute_motion_prior(SAMPLE sample)
 					Target target_new = targets_prev[k].apply_motion_model();
 
 					float log_motion = log_gaussian_prob(targets[j].cx_, target_new.cx_, parameter_.sigma_det_x * target_new.width_)
-							+ log_gaussian_prob(targets[j].cy_, target_new.cy_, parameter_.sigma_det_y * target_new.height_);
+							+ log_gaussian_prob(targets[j].cy_, target_new.cy_, parameter_.sigma_det_y * target_new.height_)
+							+ log_gaussian_prob(targets[j].width_, target_new.width_, parameter_.sigma_det_x * target_new.width_)
+							+ log_gaussian_prob(targets[j].height_, target_new.height_, parameter_.sigma_det_y * target_new.height_);
 
-					prior *= exp(log_motion);
+					prior += log_motion;
 
 					// cache the motion prior
-					samples_[i].targets[k].motion_prior_ = exp(log_motion);
+					samples_[i].targets[k].motion_prior_ = log_motion;
 					break;
 				}
 			}
 		}
 
 		// handle unmatched targets
-		prior *= pow(parameter_.prob_moves[MOVE_LEAVE], targets_prev.size() - count) *
-				pow(parameter_.prob_moves[MOVE_ADD], targets.size() - count);
+		prior += log(parameter_.prob_moves[MOVE_LEAVE]) * (targets_prev.size() - count) +
+				 log(parameter_.prob_moves[MOVE_ADD]) * (targets.size() - count);
 
 		// save the motion prior
 		samples_[i].motion_prior = prior;
@@ -840,8 +896,8 @@ float Tracker::compute_motion_ratio(Target target, MOVE_TYPE move)
 	for(std::size_t i = 0; i < samples_.size(); i++)
 	{
 		int flag = 0;
-		float prior = 1;
-		float prior_old = 1;
+		float prior = 0;
+		float prior_old = 0;
 		float motion_prior = samples_[i].motion_prior;
 		float motion_prior_new;
 		std::vector<Target> targets_prev = samples_[i].targets;
@@ -855,16 +911,18 @@ float Tracker::compute_motion_ratio(Target target, MOVE_TYPE move)
 				prior_old = samples_[i].targets[k].motion_prior_;
 				if(move == MOVE_LEAVE)
 				{
-					samples_[i].targets[k].motion_prior_new_ = 1;
+					samples_[i].targets[k].motion_prior_new_ = 0;
 				}
 				else
 				{
 					Target target_new = targets_prev[k].apply_motion_model();
 
 					float log_motion = log_gaussian_prob(target.cx_, target_new.cx_, parameter_.sigma_det_x * target_new.width_)
-							+ log_gaussian_prob(target.cy_, target_new.cy_, parameter_.sigma_det_y * target_new.height_);
+							+ log_gaussian_prob(target.cy_, target_new.cy_, parameter_.sigma_det_y * target_new.height_)
+							+ log_gaussian_prob(target.width_, target_new.width_, parameter_.sigma_det_x * target_new.width_)
+							+ log_gaussian_prob(target.height_, target_new.height_, parameter_.sigma_det_y * target_new.height_);
 
-					prior = exp(log_motion);
+					prior = log_motion;
 					// cache the motion prior
 					samples_[i].targets[k].motion_prior_new_ = prior;
 				}
@@ -875,27 +933,27 @@ float Tracker::compute_motion_ratio(Target target, MOVE_TYPE move)
 		if(move == MOVE_STAY)
 		{
 			if(flag)
-				motion_prior_new = motion_prior / parameter_.prob_moves[MOVE_LEAVE] * prior;
+				motion_prior_new = motion_prior - log(parameter_.prob_moves[MOVE_LEAVE]) + prior;
 			else
-				motion_prior_new = motion_prior * parameter_.prob_moves[MOVE_ADD];
+				motion_prior_new = motion_prior + log(parameter_.prob_moves[MOVE_ADD]);
 		}
 		else if(move == MOVE_LEAVE)
 		{
 			if(flag)
-				motion_prior_new = motion_prior / prior_old * parameter_.prob_moves[MOVE_LEAVE];
+				motion_prior_new = motion_prior - prior_old + log(parameter_.prob_moves[MOVE_LEAVE]);
 			else
-				motion_prior_new = motion_prior / parameter_.prob_moves[MOVE_ADD];
+				motion_prior_new = motion_prior - log(parameter_.prob_moves[MOVE_ADD]);
 		}
 		else if(move == MOVE_UPDATE)
 		{
 			if(flag)
-				motion_prior_new = motion_prior / prior_old * prior;
+				motion_prior_new = motion_prior - prior_old + prior;
 			else
 				motion_prior_new = motion_prior;
 		}
 
-		prior_sum += motion_prior;
-		prior_new_sum += motion_prior_new;
+		prior_sum += exp(motion_prior);
+		prior_new_sum += exp(motion_prior_new);
 
 		// save the motion prior
 		samples_[i].motion_prior_new = motion_prior_new;
@@ -912,11 +970,11 @@ void Tracker::update_motion_prior(MOVE_TYPE move)
 	{
 	case MOVE_ADD:
 		for(std::size_t i = 0; i < samples_.size(); i++)
-			samples_[i].motion_prior *= parameter_.prob_moves[MOVE_ADD];
+			samples_[i].motion_prior += log(parameter_.prob_moves[MOVE_ADD]);
 		break;
 	case MOVE_DELETE:
 		for(std::size_t i = 0; i < samples_.size(); i++)
-			samples_[i].motion_prior /= parameter_.prob_moves[MOVE_ADD];
+			samples_[i].motion_prior -= log(parameter_.prob_moves[MOVE_ADD]);
 		break;
 	case MOVE_STAY:
 	case MOVE_LEAVE:
@@ -966,13 +1024,16 @@ float Tracker::sample_location(Target target, float sigma_x, float sigma_y, Targ
 
 		float rx = rng_.gaussian(sigma_x * w);
 		float ry = rng_.gaussian(sigma_y * h);
+		float rw = rng_.gaussian(sigma_x * w);
+		float rh = rng_.gaussian(sigma_y * h);
 
-		prob += exp(log_gaussian_prob(rx, 0, sigma_x * w) + log_gaussian_prob(ry, 0, sigma_y * h));
+		prob += exp(log_gaussian_prob(rx, 0, sigma_x * w) + log_gaussian_prob(ry, 0, sigma_y * h)
+				  + log_gaussian_prob(rw, 0, sigma_x * w) + log_gaussian_prob(rh, 0, sigma_y * h));
 
 		mx += cx + rx;
 		my += cy + ry;
-		mw += w;
-		mh += h;
+		mw += w + rw;
+		mh += h + rh;
 		score += target_new.score_;
 	}
 

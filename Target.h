@@ -36,6 +36,7 @@ private:
 
 	int count_active_;
 	int count_lost_;
+	int count_tracked_;
 };
 
 #endif /* TARGET_H_ */

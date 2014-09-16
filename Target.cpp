@@ -19,10 +19,11 @@ Target::Target()
 	vx_ = 0;
 	vy_ = 0;
 	status_ = TARGET_ADDED;
-	motion_prior_ = 1;
-	motion_prior_new_ = 1;
+	motion_prior_ = 0;
+	motion_prior_new_ = 0;
 	count_active_ = 0;
 	count_lost_ = 0;
+	count_tracked_ = 0;
 }
 
 Target::~Target() {
@@ -45,6 +46,7 @@ Target Target::apply_motion_model()
 	target.status_ = status_;
 	target.count_active_ = count_active_;
 	target.count_lost_ = count_lost_;
+	target.count_tracked_ = count_tracked_;
 
 	return target;
 }

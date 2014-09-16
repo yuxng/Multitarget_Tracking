@@ -54,9 +54,6 @@ typedef struct parameter
 	// probability of moves
 	float prob_moves[MOVE_NUM];
 
-	// minimum bounding box overlap in data association
-	float min_overlap;
-
 	// standard deviation to perturb detections
 	float sigma_det_x;
 	float sigma_det_y;
@@ -65,7 +62,9 @@ typedef struct parameter
 	float det_threshold;
 
 	int num_active2tracked;
-	int num_lost2inactive;
+	float frac_lost2inactive;
+
+	float fix_detection_size;
 }PARAMETER;
 
 float log_gaussian_prob(float x, float m, float std);

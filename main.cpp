@@ -23,7 +23,7 @@ int main(int argc, char** argv)
 	{
 		tracker.process_frame();
 
-		cv::waitKey(0);
+		cv::waitKey(1);
 		tracker.next_frame();
 	}
 }

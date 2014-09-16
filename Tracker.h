@@ -35,6 +35,7 @@ public:
 	float get_sample_target(int id, Target &target);
 	float sample_location(Target target, float sigma_x, float sigma_y, Target &target_sample);
 	float target_overlap(Target t1, Target t2);
+	float target_distance(Target t1, Target t2);
 
 	// sampling related
 	void run_rjmcmc_sampling(std::vector<Target> targets, cv::Mat confidence);
