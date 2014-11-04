@@ -78,7 +78,7 @@ void Tracker::initialize_tracker()
 	parameter_.num_active2tracked = 2;
 	parameter_.frac_lost2inactive = 0.1;
 
-	parameter_.fix_detection_size = 0;
+	parameter_.fix_detection_size = 40;
 
 	parameter_.dir_detection = "cache/detection/";
 	parameter_.dir_tracking = "cache/tracking/";
@@ -371,6 +371,25 @@ SAMPLE Tracker::get_initial_sample()
 }
 
 
+// compute mean sample
+SAMPLE Tracker::get_mean_sample()
+{
+	SAMPLE sample;
+
+	// get the target
+	for(std::size_t i = 0; i < targets_.size(); i++)
+	{
+		if(targets_[i].status_ != TARGET_INACTIVE)
+		{
+			Target target = targets_[i];
+			sample.targets.push_back(target);
+		}
+	}
+
+	return sample;
+}
+
+
 // Reversible jump MCMC sampling
 // targets: object detections
 // confidence: object detection heat map
@@ -631,6 +650,10 @@ void Tracker::run_rjmcmc_sampling(std::vector<Target> targets, cv::Mat confidenc
 			std::cout << "target " << i << " " << num << " samples, status " << status << " score " << score
 				<< " vx " << vx << " vy " << vy << " num tracked " << count_tracked << " num lost " << count_lost << std::endl;
 	}
+
+	// just keep the mean sample
+	samples_.clear();
+	samples_.push_back(get_mean_sample());
 }
 
 // Hungarian algorithm for data association

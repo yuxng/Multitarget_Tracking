@@ -44,6 +44,7 @@ public:
 	float* hungarian(std::vector<Target> bboxes_target, std::vector<Target> bboxes);
 	void perturb_target(Target &target);
 	SAMPLE get_initial_sample();
+	SAMPLE get_mean_sample();
 	SAMPLE add_target(SAMPLE sample, std::vector<Target> targets, std::size_t &target_id, float &acceptance_ratio);
 	SAMPLE delete_target(SAMPLE sample, std::vector<Target> targets, std::size_t &target_id, float &acceptance_ratio);
 	SAMPLE stay_target(SAMPLE sample, std::vector<Target> targets, std::size_t &target_id, float &acceptance_ratio);
