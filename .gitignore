@@ -2,3 +2,5 @@
 /Default/
 .project
 .cproject
+*.o
+tracker
