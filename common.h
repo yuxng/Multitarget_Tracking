@@ -65,6 +65,7 @@ typedef struct parameter
 	float frac_lost2inactive;
 
 	float fix_detection_size;
+	float heatmap_scale;
 
 	std::string dir_detection;
 	std::string dir_tracking;

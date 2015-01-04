@@ -79,6 +79,7 @@ void Tracker::initialize_tracker()
 	parameter_.frac_lost2inactive = 0.1;
 
 	parameter_.fix_detection_size = 40;
+	parameter_.heatmap_scale = 2.1405;
 
 	parameter_.dir_detection = "cache/detection/";
 	parameter_.dir_tracking = "cache/tracking/";
@@ -312,7 +313,7 @@ void Tracker::process_frame()
 	for(std::size_t i = 0; i < targets_.size(); i++)
 	{
 		Target target = targets_[i];
-		if(target.status_ != TARGET_INACTIVE)
+		if(target.status_ != TARGET_INACTIVE && target.status_ != TARGET_ADDED)
 			result_file_ << frame_id << " " << target.id_ << " " << target.status_ << " " << target.cx_ << " " << target.cy_ << " "
 				<< target.width_ << " " << target.height_ << " " << target.score_ << std::endl;
 	}
@@ -882,8 +883,8 @@ SAMPLE Tracker::update_target(SAMPLE sample_prev, std::vector<Target> targets, c
 
 	// get the confidence score
     // down size by factor 4
-	int x = floor(target.cx_ / 4);
-	int y = floor(target.cy_ / 4);
+	int x = floor(target.cx_ / parameter_.heatmap_scale);
+	int y = floor(target.cy_ / parameter_.heatmap_scale);
 	// check whether point is in image
 	if((x < 0) || (y < 0) || (x > confidence.cols) || (y > confidence.rows))
     {
