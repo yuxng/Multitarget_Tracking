@@ -79,7 +79,8 @@ void Tracker::initialize_tracker()
 	parameter_.frac_lost2inactive = 0.1;
 
 	parameter_.fix_detection_size = 40;
-	parameter_.heatmap_scale = 2.1405;
+	// parameter_.heatmap_scale = 2.1405;
+	parameter_.heatmap_scale = 2.3529;
 
 	parameter_.dir_detection = "cache/detection/";
 	parameter_.dir_tracking = "cache/tracking/";

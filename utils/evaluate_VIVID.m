@@ -1,14 +1,17 @@
 function evaluate_VIVID
 
 seq_idx = 'egtest01';
+append = 'simple';
 
 % read annotations in idl format 
 gt = read_VIVID_annotations(seq_idx);
 people  = sub(gt, find(gt.w < 0));
 % read detection results
-dres = read_VIVID_confidences(seq_idx);
+% dres = read_VIVID_confidences(seq_idx);
+dres = read_VIVID_detections(seq_idx);
 % read tracking results
-dres_track = read_tracking_results('../cache/results.txt');
+file_tracking = sprintf('../cache/%s_%s_results.txt', seq_idx, append);
+dres_track = read_tracking_results(file_tracking);
 
 % compute fppi, recall and precision
 [missr, fppi, prec] = score(dres_track, gt, people);

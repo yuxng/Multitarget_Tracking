@@ -16,6 +16,7 @@ for seq_idx = 1:numel(snames)
     filename = fullfile(detection_dir, seq_name, 'correlation_detections.csv');
     fid = fopen(filename, 'r');
     C = textscan(fid, '%d %s %f %f %f');
+    fclose(fid);
     frame_ids = C{1};
     frame_names = C{2};
     width = filter_size / filter_scales(seq_idx);

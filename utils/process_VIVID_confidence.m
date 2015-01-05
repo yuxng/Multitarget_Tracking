@@ -7,6 +7,7 @@ snames = {'egtest01', 'egtest02', 'egtest03', 'egtest04'};
 heatmap_scales = [2.1405, 2.3529, 2.3529, 2.3529];
 width = 40;
 height = 40;
+threshold = 4;
 
 for seq_idx = 1:numel(snames)
     seq_name = snames{seq_idx};
@@ -35,10 +36,12 @@ for seq_idx = 1:numel(snames)
         else
             % det = [C{3}(index)-width/2 C{4}(index)-height/2 width*ones(numel(index),1) height*ones(numel(index),1)];
             det = [C{3}(index)-width/2 C{4}(index)-height/2 C{3}(index)+width/2 C{4}(index)+height/2 C{5}(index)];
-            I = nms(det, 0.3);
+            I = nms(det, 0.5);
             det = det(I,:);
             det(:,3) = width;
             det(:,4) = height;
+            I = det(:,5) > threshold;
+            det = det(I,:);
             det(:,5) = [];
         end
         % heatmap
