@@ -61,6 +61,9 @@ typedef struct parameter
 	// detection threshold
 	float det_threshold;
 
+	// weight for detection score
+	float det_weight;
+
 	int num_active2tracked;
 	float frac_lost2inactive;
 

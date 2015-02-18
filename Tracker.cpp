@@ -62,25 +62,26 @@ void Tracker::initialize_tracker()
 	confidence_path_iterator_ = confidence_paths_.begin();
 
 	// set parameters
-	parameter_.num_sample = 3000;
+	parameter_.num_sample = 200;
 
 	parameter_.prob_moves[MOVE_ADD] = 0.1;
 	parameter_.prob_moves[MOVE_DELETE] = 0.1;
-	parameter_.prob_moves[MOVE_STAY] = 0.2;
-	parameter_.prob_moves[MOVE_LEAVE] = 0.2;
-	parameter_.prob_moves[MOVE_UPDATE] = 0.4;
+	parameter_.prob_moves[MOVE_STAY] = 0.1;
+	parameter_.prob_moves[MOVE_LEAVE] = 0.1;
+	parameter_.prob_moves[MOVE_UPDATE] = 0.6;
 
 	parameter_.sigma_det_x = 0.01;
 	parameter_.sigma_det_y = 0.01;
 
 	parameter_.det_threshold = 0;
+	parameter_.det_weight = 0.4;
 
 	parameter_.num_active2tracked = 2;
-	parameter_.frac_lost2inactive = 0.1;
+	parameter_.frac_lost2inactive = 0.01;
 
 	parameter_.fix_detection_size = 40;
-	// parameter_.heatmap_scale = 2.1405;
-	parameter_.heatmap_scale = 2.3529;
+	parameter_.heatmap_scale = 2.1405;
+	// parameter_.heatmap_scale = 2.3529;
 
 	parameter_.dir_detection = "cache/detection/";
 	parameter_.dir_tracking = "cache/tracking/";
@@ -172,7 +173,11 @@ bool Tracker::read_confidence_file(const std::string filename, std::vector<Targe
 				target.width_ = det[2];
 				target.height_ = det[3];
 			}
-			target.score_ = det[4] + 0.5;
+			target.sigmax_ = parameter_.sigma_det_x * target.width_;
+			target.sigmay_ = parameter_.sigma_det_y * target.height_;
+			target.sigmaw_ = parameter_.sigma_det_x * target.width_;
+			target.sigmah_ = parameter_.sigma_det_y * target.height_;
+			target.score_ = parameter_.det_weight * (det[4] + 0.5) + (1 - parameter_.det_weight) * 1.0;
 			target.status_ = TARGET_ADDED;
 			target.count_active_ = 0;
 			target.count_lost_ = 0;
@@ -378,16 +383,14 @@ SAMPLE Tracker::get_mean_sample()
 {
 	SAMPLE sample;
 
-	// get the target
 	for(std::size_t i = 0; i < targets_.size(); i++)
 	{
-		if(targets_[i].status_ != TARGET_INACTIVE)
-		{
-			Target target = targets_[i];
-			sample.targets.push_back(target);
-		}
+		targets_[i].sample_indexes_.clear();
+		SAMPLE_INDEX sample_index(0, i);
+		targets_[i].sample_indexes_.push_back(sample_index);
 	}
 
+	sample.targets = targets_;
 	return sample;
 }
 
@@ -532,7 +535,7 @@ void Tracker::run_rjmcmc_sampling(std::vector<Target> targets, cv::Mat confidenc
 				sample = leave_target(sample_prev, targets_stay, target_id, acceptance_ratio);
 				break;
 			case MOVE_UPDATE:
-				sample = update_target(sample_prev, targets_stay, confidence, acceptance_ratio);
+				sample = update_target(sample_prev, targets_stay, targets, confidence, acceptance_ratio);
 				break;
 			}
 
@@ -566,7 +569,7 @@ void Tracker::run_rjmcmc_sampling(std::vector<Target> targets, cv::Mat confidenc
 				// update the motion prior
 				update_motion_prior(move);
 			}
-			// std::cout << "move type " << move << " acceptance ratio " << acceptance_ratio << " number of stay targets " << targets_stay.size() << std::endl;
+			std::cout << "move type " << move << " acceptance ratio " << acceptance_ratio << " number of stay targets " << targets_stay.size() << std::endl;
 		}
 	}
 	samples_.clear();
@@ -635,14 +638,51 @@ void Tracker::run_rjmcmc_sampling(std::vector<Target> targets, cv::Mat confidenc
 			else if(status == TARGET_ADDED)
 				status = TARGET_ACTIVE;
 		}
+		// estimate variances
+		float sigmax = 0, sigmay = 0, sigmaw = 0, sigmah = 0;
+		for(std::size_t j = 0; j < num; j++)
+		{
+			SAMPLE_INDEX sample_index = targets_[i].sample_indexes_[j];
+			Target target = samples_[sample_index.first].targets[sample_index.second];
+			sigmax += (target.cx_ - cx) * (target.cx_ - cx);
+			sigmay += (target.cy_ - cy) * (target.cy_ - cy);
+			sigmaw += (target.width_ - w) * (target.width_ - w);
+			sigmah += (target.height_ - h) * (target.height_ - h);
+		}
+		if(num > 0)
+		{
+			sigmax = sqrt(sigmax / num);
+			sigmay = sqrt(sigmay / num);
+			sigmaw = sqrt(sigmaw / num);
+			sigmah = sqrt(sigmah / num);
+		}
+		else
+		{
+			sigmax = parameter_.sigma_det_x * w;
+			sigmay = parameter_.sigma_det_y * h;
+			sigmaw = parameter_.sigma_det_x * w;
+			sigmah = parameter_.sigma_det_y * h;
+		}
+		if(sigmax == 0)
+			sigmax = parameter_.sigma_det_x * w;
+		if(sigmay == 0)
+			sigmay = parameter_.sigma_det_y * h;
+		if(sigmaw == 0)
+			sigmaw = parameter_.sigma_det_x * w;
+		if(sigmah == 0)
+			sigmah = parameter_.sigma_det_y * h;
 
-		targets_[i].cx_ = cx;
-		targets_[i].cy_ = cy;
+		targets_[i].cx_ = cx + fabs(rng_.gaussian(7.5));
+		targets_[i].cy_ = cy + fabs(rng_.gaussian(7.5));
 		targets_[i].width_ = w;
 		targets_[i].height_ = h;
 		targets_[i].score_ = score;
 		targets_[i].vx_ = vx;
 		targets_[i].vy_ = vy;
+		targets_[i].sigmax_ = sigmax;
+		targets_[i].sigmay_ = sigmay;
+		targets_[i].sigmaw_ = sigmaw;
+		targets_[i].sigmah_ = sigmah;
 		targets_[i].status_ = status;
 		targets_[i].count_active_ = count_active;
 		targets_[i].count_lost_ = count_lost;
@@ -650,7 +690,9 @@ void Tracker::run_rjmcmc_sampling(std::vector<Target> targets, cv::Mat confidenc
 
 		if(status != TARGET_INACTIVE)
 			std::cout << "target " << i << " " << num << " samples, status " << status << " score " << score
-				<< " vx " << vx << " vy " << vy << " num tracked " << count_tracked << " num lost " << count_lost << std::endl;
+				<< " vx " << vx << " vy " << vy << " sigmax " << sigmax << " sigmay " << sigmay <<
+				" sigmaw " << sigmaw << " sigmah " << sigmah <<
+				" num tracked " << count_tracked << " num lost " << count_lost << std::endl;
 	}
 
 	// just keep the mean sample
@@ -790,7 +832,8 @@ SAMPLE Tracker::stay_target(SAMPLE sample_prev, std::vector<Target> targets, std
 	// randomly select one object to stay
 	std::size_t idx = floor(rng_.uniform((double)0.0, (double)targets.size()));
 	Target target = targets[idx];
-	float prob = get_sample_target(target.id_, target);
+	Target target_tmp;
+	float prob = get_sample_target(target.id_, target_tmp);
 
 	// add the target to sample
 	SAMPLE sample = sample_prev;
@@ -801,6 +844,8 @@ SAMPLE Tracker::stay_target(SAMPLE sample_prev, std::vector<Target> targets, std
 	float move_ratio = parameter_.prob_moves[MOVE_LEAVE] / parameter_.prob_moves[MOVE_STAY];
 	float num_stay = targets.size();
 	float num_leave = num_stayed_ - num_stay + 1;
+	// std::cout << "In stay target, prob = " << prob << " num leave " << num_leave << " score " << target.score_ <<
+	//		" motion ratio " << motion_ratio << " move ratio " << move_ratio << " num stay " << num_stay << std::endl;
 	acceptance_ratio = target.score_ * motion_ratio * move_ratio * num_stay / (num_leave * prob);
 
 	// return the object id stayed
@@ -855,7 +900,8 @@ SAMPLE Tracker::leave_target(SAMPLE sample_prev, std::vector<Target> targets, st
 
 
 // update move
-SAMPLE Tracker::update_target(SAMPLE sample_prev, std::vector<Target> targets, cv::Mat confidence, float &acceptance_ratio)
+SAMPLE Tracker::update_target(SAMPLE sample_prev, std::vector<Target> targets, std::vector<Target> targets_det,
+		cv::Mat confidence, float &acceptance_ratio)
 {
 	if (targets.size() == (std::size_t)num_stayed_)
 	{
@@ -894,7 +940,16 @@ SAMPLE Tracker::update_target(SAMPLE sample_prev, std::vector<Target> targets, c
     }
 	else
 	{
-		target.score_ = confidence.at<float>(y, x) + 0.5;
+		// compute bounding box overlap
+		float overlap = -1;
+		for(std::size_t i = 0; i < targets_det.size(); i++)
+		{
+			float ov = target_overlap(target, targets_det[i]);
+			if(ov > overlap)
+				overlap = ov;
+		}
+
+		target.score_ = parameter_.det_weight * (confidence.at<float>(y, x) + 0.5) + (1 - parameter_.det_weight) * overlap;
 		float motion_ratio = compute_motion_ratio(target, MOVE_UPDATE);
 		acceptance_ratio = (target.score_ / sample_prev.targets[index].score_) * motion_ratio;
 
@@ -910,8 +965,8 @@ void Tracker::perturb_target(Target &target)
 	// perturb the bounding box center
 	target.cx_ += rng_.gaussian(parameter_.sigma_det_x * target.width_);
 	target.cy_ += rng_.gaussian(parameter_.sigma_det_y * target.height_);
-	target.width_ += rng_.gaussian(parameter_.sigma_det_x * target.width_);
-	target.height_ += rng_.gaussian(parameter_.sigma_det_y * target.height_);
+	target.width_ += rng_.gaussian(0.1);
+	target.height_ += rng_.gaussian(0.1);
 }
 
 
@@ -936,10 +991,10 @@ void Tracker::compute_motion_prior(SAMPLE sample)
 					count++;
 					Target target_new = targets_prev[k].apply_motion_model();
 
-					float log_motion = log_gaussian_prob(targets[j].cx_, target_new.cx_, parameter_.sigma_det_x * target_new.width_)
-							+ log_gaussian_prob(targets[j].cy_, target_new.cy_, parameter_.sigma_det_y * target_new.height_)
-							+ log_gaussian_prob(targets[j].width_, target_new.width_, parameter_.sigma_det_x * target_new.width_)
-							+ log_gaussian_prob(targets[j].height_, target_new.height_, parameter_.sigma_det_y * target_new.height_);
+					float log_motion = (log_gaussian_prob(targets[j].cx_, target_new.cx_, target_new.sigmax_)
+							+ log_gaussian_prob(targets[j].cy_, target_new.cy_, target_new.sigmay_)
+							+ log_gaussian_prob(targets[j].width_, target_new.width_, target_new.sigmaw_)
+							+ log_gaussian_prob(targets[j].height_, target_new.height_, target_new.sigmah_)) / 4;
 
 					prior += log_motion;
 
@@ -956,6 +1011,7 @@ void Tracker::compute_motion_prior(SAMPLE sample)
 
 		// save the motion prior
 		samples_[i].motion_prior = prior;
+		// std::cout << "In compute motion prior, " << "prior " << prior << std::endl;
 	}
 }
 
@@ -990,11 +1046,11 @@ float Tracker::compute_motion_ratio(Target target, MOVE_TYPE move)
 				{
 					Target target_new = targets_prev[k].apply_motion_model();
 
-					float log_motion = log_gaussian_prob(target.cx_, target_new.cx_, parameter_.sigma_det_x * target_new.width_)
-							+ log_gaussian_prob(target.cy_, target_new.cy_, parameter_.sigma_det_y * target_new.height_)
-							+ log_gaussian_prob(target.width_, target_new.width_, parameter_.sigma_det_x * target_new.width_)
-							+ log_gaussian_prob(target.height_, target_new.height_, parameter_.sigma_det_y * target_new.height_);
-
+					float log_motion = (log_gaussian_prob(target.cx_, target_new.cx_, target_new.sigmax_)
+							+ log_gaussian_prob(target.cy_, target_new.cy_, target_new.sigmay_)
+							+ log_gaussian_prob(target.width_, target_new.width_, target_new.sigmaw_)
+							+ log_gaussian_prob(target.height_, target_new.height_, target_new.sigmah_)) / 4;
+					// std::cout << "In compute motion ratio, " << "log motion " << log_motion << " prior old " << prior_old  << std::endl;
 					prior = log_motion;
 					// cache the motion prior
 					samples_[i].targets[k].motion_prior_new_ = prior;
@@ -1025,14 +1081,16 @@ float Tracker::compute_motion_ratio(Target target, MOVE_TYPE move)
 				motion_prior_new = motion_prior;
 		}
 
-		prior_sum += exp(motion_prior);
-		prior_new_sum += exp(motion_prior_new);
+		prior_sum += motion_prior;
+		prior_new_sum += motion_prior_new;
+		// std::cout << "In compute motion ratio, " << "motion prior " << motion_prior << ", motion prior new " << motion_prior_new << std::endl;
+		// std::cout << "In compute motion ratio, " << "prior sum " << prior_sum << ", prior sum new " << prior_new_sum << std::endl;
 
 		// save the motion prior
 		samples_[i].motion_prior_new = motion_prior_new;
 	}
 
-	return prior_new_sum / prior_sum;
+	return exp(prior_new_sum - prior_sum);
 }
 
 
@@ -1071,7 +1129,7 @@ float Tracker::get_sample_target(int id, Target &target)
 	{
 		if(id == targets_[i].id_)
 		{
-			prob = sample_location(targets_[i], parameter_.sigma_det_x, parameter_.sigma_det_y, target);
+			prob = sample_location(targets_[i], target);
 			break;
 		}
 	}
@@ -1081,7 +1139,7 @@ float Tracker::get_sample_target(int id, Target &target)
 
 
 // sample a new location of the target
-float Tracker::sample_location(Target target, float sigma_x, float sigma_y, Target &target_sample)
+float Tracker::sample_location(Target target, Target &target_sample)
 {
 	float prob = 0, mx = 0, my = 0, mw = 0, mh = 0, score = 0;
 	std::size_t num = target.sample_indexes_.size();
@@ -1095,13 +1153,13 @@ float Tracker::sample_location(Target target, float sigma_x, float sigma_y, Targ
 		float w = target_new.width_;
 		float h = target_new.height_;
 
-		float rx = rng_.gaussian(sigma_x * w);
-		float ry = rng_.gaussian(sigma_y * h);
-		float rw = rng_.gaussian(sigma_x * w);
-		float rh = rng_.gaussian(sigma_y * h);
+		float rx = rng_.gaussian(parameter_.sigma_det_x * w);
+		float ry = rng_.gaussian(parameter_.sigma_det_y * h);
+		float rw = rng_.gaussian(parameter_.sigma_det_x * w);
+		float rh = rng_.gaussian(parameter_.sigma_det_y * h);
 
-		prob += exp(log_gaussian_prob(rx, 0, sigma_x * w) + log_gaussian_prob(ry, 0, sigma_y * h)
-				  + log_gaussian_prob(rw, 0, sigma_x * w) + log_gaussian_prob(rh, 0, sigma_y * h));
+		prob += exp((log_gaussian_prob(rx, 0, target_new.sigmax_) + log_gaussian_prob(ry, 0, target_new.sigmay_)
+				  + log_gaussian_prob(rw, 0, target_new.sigmaw_) + log_gaussian_prob(rh, 0, target_new.sigmah_))/4);
 
 		mx += cx + rx;
 		my += cy + ry;

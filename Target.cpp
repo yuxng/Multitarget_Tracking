@@ -18,6 +18,10 @@ Target::Target()
 	score_ = 0;
 	vx_ = 0;
 	vy_ = 0;
+	sigmax_ = 0;
+	sigmay_ = 0;
+	sigmaw_ = 0;
+	sigmah_ = 0;
 	status_ = TARGET_ADDED;
 	motion_prior_ = 0;
 	motion_prior_new_ = 0;
@@ -43,6 +47,10 @@ Target Target::apply_motion_model()
 	target.score_ = score_;
 	target.vx_ = vx_;
 	target.vy_ = vy_;
+	target.sigmax_ = sigmax_;
+	target.sigmay_ = sigmay_;
+	target.sigmaw_ = sigmaw_;
+	target.sigmah_ = sigmah_;
 	target.status_ = status_;
 	target.count_active_ = count_active_;
 	target.count_lost_ = count_lost_;

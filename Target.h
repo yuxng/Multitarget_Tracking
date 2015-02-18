@@ -27,6 +27,10 @@ private:
 	float score_;	// confidence score of the target
 	float vx_;	// velocity in x-axis
 	float vy_;	// velocity in y-axis
+	float sigmax_;  // variance in x-axis
+	float sigmay_;  // variance in y-axis
+	float sigmaw_;  // variance in width
+	float sigmah_;  // variance in height
 	TARGET_STATUS status_;
 
 	std::vector<SAMPLE_INDEX> sample_indexes_;

@@ -10,7 +10,8 @@ people  = sub(gt, find(gt.w < 0));
 % dres = read_VIVID_confidences(seq_idx);
 dres = read_VIVID_detections(seq_idx);
 % read tracking results
-file_tracking = sprintf('../cache/%s_%s_results.txt', seq_idx, append);
+% file_tracking = sprintf('../cache/%s_%s_results.txt', seq_idx, append);
+file_tracking = '../cache/results.txt';
 dres_track = read_tracking_results(file_tracking);
 
 % compute fppi, recall and precision

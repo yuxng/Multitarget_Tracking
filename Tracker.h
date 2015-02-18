@@ -35,7 +35,7 @@ public:
 	void next_frame();
 
 	float get_sample_target(int id, Target &target);
-	float sample_location(Target target, float sigma_x, float sigma_y, Target &target_sample);
+	float sample_location(Target target, Target &target_sample);
 	float target_overlap(Target t1, Target t2);
 	float target_distance(Target t1, Target t2);
 
@@ -49,7 +49,7 @@ public:
 	SAMPLE delete_target(SAMPLE sample, std::vector<Target> targets, std::size_t &target_id, float &acceptance_ratio);
 	SAMPLE stay_target(SAMPLE sample, std::vector<Target> targets, std::size_t &target_id, float &acceptance_ratio);
 	SAMPLE leave_target(SAMPLE sample, std::vector<Target> targets, std::size_t &target_id, float &acceptance_ratio);
-	SAMPLE update_target(SAMPLE sample, std::vector<Target> targets, cv::Mat confidence, float &acceptance_ratio);
+	SAMPLE update_target(SAMPLE sample, std::vector<Target> targets, std::vector<Target> targets_det, cv::Mat confidence, float &acceptance_ratio);
 
 	void compute_motion_prior(SAMPLE sample);
 	void update_motion_prior(MOVE_TYPE move);
