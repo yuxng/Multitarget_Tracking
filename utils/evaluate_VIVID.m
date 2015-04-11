@@ -1,6 +1,6 @@
 function evaluate_VIVID
 
-seq_idx = 'egtest01';
+seq_idx = 'egtest04';
 append = 'simple';
 
 % read annotations in idl format 
@@ -29,10 +29,12 @@ hold on;
 
 figure(1);
 draw_fppimr(1-missr, fppi, 'g');
+title(seq_idx);
 hold off;
 
 figure(2);
 draw_PR_curve(1-missr, prec, 'g');
+title(seq_idx);
 hold off;
 
 names = {'Tracking', 'Detection'};

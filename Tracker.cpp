@@ -77,11 +77,11 @@ void Tracker::initialize_tracker()
 	parameter_.det_weight = 0.4;
 
 	parameter_.num_active2tracked = 2;
-	parameter_.frac_lost2inactive = 0.01;
+	parameter_.frac_lost2inactive = 50;
 
 	parameter_.fix_detection_size = 40;
-	parameter_.heatmap_scale = 2.1405;
-	// parameter_.heatmap_scale = 2.3529;
+	parameter_.heatmap_scale = 2.1405;  //egtest01
+	// parameter_.heatmap_scale = 2.3529;  //egtest02, 03, 04
 
 	parameter_.dir_detection = "cache/detection/";
 	parameter_.dir_tracking = "cache/tracking/";
@@ -288,7 +288,7 @@ void Tracker::process_frame()
 	cv::Mat image_tracking = image.clone();
 	for(std::size_t i = 0; i < targets_.size(); i++)
 	{
-		if(targets_[i].status_ != TARGET_TRACKED && targets_[i].status_ != TARGET_LOST)
+		if(targets_[i].status_ != TARGET_TRACKED)
 			continue;
 		float x1 = targets_[i].cx_ - targets_[i].width_ / 2;
 		float x2 = targets_[i].cx_ + targets_[i].width_ / 2;
@@ -319,7 +319,7 @@ void Tracker::process_frame()
 	for(std::size_t i = 0; i < targets_.size(); i++)
 	{
 		Target target = targets_[i];
-		if(target.status_ != TARGET_INACTIVE && target.status_ != TARGET_ADDED)
+		if(target.status_ != TARGET_INACTIVE && target.status_ != TARGET_ADDED && target.status_ != TARGET_LOST)
 			result_file_ << frame_id << " " << target.id_ << " " << target.status_ << " " << target.cx_ << " " << target.cy_ << " "
 				<< target.width_ << " " << target.height_ << " " << target.score_ << std::endl;
 	}
@@ -434,7 +434,7 @@ void Tracker::run_rjmcmc_sampling(std::vector<Target> targets, cv::Mat confidenc
 				sample_init.targets[i].status_ = TARGET_INACTIVE;
 			else
 			{
-				if(++sample_init.targets[i].count_lost_ >= MAX(parameter_.frac_lost2inactive * sample_init.targets[i].count_tracked_, 2))
+				if(++sample_init.targets[i].count_lost_ >= parameter_.frac_lost2inactive)
 				{
 					sample_init.targets[i].status_ = TARGET_INACTIVE;
 					std::cout << std::endl << "inactive " << sample_init.targets[i].count_lost_ << " " << sample_init.targets[i].count_tracked_ << std::endl;
@@ -569,7 +569,7 @@ void Tracker::run_rjmcmc_sampling(std::vector<Target> targets, cv::Mat confidenc
 				// update the motion prior
 				update_motion_prior(move);
 			}
-			std::cout << "move type " << move << " acceptance ratio " << acceptance_ratio << " number of stay targets " << targets_stay.size() << std::endl;
+			// std::cout << "move type " << move << " acceptance ratio " << acceptance_ratio << " number of stay targets " << targets_stay.size() << std::endl;
 		}
 	}
 	samples_.clear();
@@ -672,8 +672,8 @@ void Tracker::run_rjmcmc_sampling(std::vector<Target> targets, cv::Mat confidenc
 		if(sigmah == 0)
 			sigmah = parameter_.sigma_det_y * h;
 
-		targets_[i].cx_ = cx + fabs(rng_.gaussian(7.5));
-		targets_[i].cy_ = cy + fabs(rng_.gaussian(7.5));
+		targets_[i].cx_ = cx;
+		targets_[i].cy_ = cy;
 		targets_[i].width_ = w;
 		targets_[i].height_ = h;
 		targets_[i].score_ = score;
