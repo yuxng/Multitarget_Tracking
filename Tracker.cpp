@@ -672,8 +672,8 @@ void Tracker::run_rjmcmc_sampling(std::vector<Target> targets, cv::Mat confidenc
 		if(sigmah == 0)
 			sigmah = parameter_.sigma_det_y * h;
 
-		targets_[i].cx_ = cx;
-		targets_[i].cy_ = cy;
+		targets_[i].cx_ = cx; // + 5 + 15; // + rng_.gaussian(2.5);
+		targets_[i].cy_ = cy; // + 5 + 15; // + rng_.gaussian(2.5);
 		targets_[i].width_ = w;
 		targets_[i].height_ = h;
 		targets_[i].score_ = score;
@@ -750,7 +750,7 @@ float Tracker::target_overlap(Target t1, Target t2)
 // compute bounding box overlap
 float Tracker::target_distance(Target t1, Target t2)
 {
-	return sqrt((t1.cx_ - t2.cx_) * (t1.cx_ - t2.cx_) + (t1.cy_ - t2.cy_) * (t1.cy_ - t2.cy_));
+	return sqrt((t1.cx_ - t2.cx_) * (t1.cx_ - t2.cx_) + (t1.cy_ - t2.cy_) * (t1.cy_ - t2.cy_)); // + rng_.gaussian(15);
 }
 
 

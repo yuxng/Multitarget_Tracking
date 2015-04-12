@@ -1,13 +1,14 @@
 function evaluate_VIVID_target
 
-seq_idx = 'egtest02';
+seq_idx = 'egtest01';
 append = 'simple';
 
 % read ground truth
 idl = read_VIVID_annotations_idl(seq_idx);
 
 % read tracking results
-file_tracking = sprintf('../cache/%s_%s_results.txt', seq_idx, append);
+% file_tracking = sprintf('../cache/results_%s_%s.txt', seq_idx, append);
+file_tracking = '../cache/results.txt';
 trackidl = read_tracking_idl(file_tracking, seq_idx); 
 
 % matching ground truth and tracking results

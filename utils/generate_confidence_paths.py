@@ -2,14 +2,14 @@ import os
 
 rootdir = os.path.abspath("../")
 
-#seq_name = "egtest01"
-#end_num = 1820
+seq_name = "egtest01"
+end_num = 1820
 #seq_name = "egtest02"
 #end_num = 1300
 #seq_name = "egtest03"
 #end_num = 2570
-seq_name = "egtest04"
-end_num = 1832
+#seq_name = "egtest04"
+#end_num = 1832
 
 format_string = "Frame_%06d.conf"
 start_num = 0

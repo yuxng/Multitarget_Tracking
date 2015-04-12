@@ -1,6 +1,6 @@
 function evaluate_VIVID
 
-seq_idx = 'egtest04';
+seq_idx = 'egtest01';
 append = 'simple';
 
 % read annotations in idl format 
