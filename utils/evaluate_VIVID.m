@@ -1,6 +1,6 @@
 function evaluate_VIVID
 
-seq_idx = 'egtest01';
+seq_idx = 'egtest04';
 append = 'simple';
 
 % read annotations in idl format 
@@ -11,7 +11,8 @@ people  = sub(gt, find(gt.w < 0));
 dres = read_VIVID_detections(seq_idx);
 % read tracking results
 % file_tracking = sprintf('../cache/%s_%s_results.txt', seq_idx, append);
-file_tracking = '../cache/results.txt';
+% file_tracking = '../cache/results.txt';
+file_tracking = sprintf('../cache/derek/results_%s.txt', seq_idx);
 dres_track = read_tracking_results(file_tracking);
 
 % compute fppi, recall and precision

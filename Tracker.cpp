@@ -672,8 +672,8 @@ void Tracker::run_rjmcmc_sampling(std::vector<Target> targets, cv::Mat confidenc
 		if(sigmah == 0)
 			sigmah = parameter_.sigma_det_y * h;
 
-		targets_[i].cx_ = cx; // + 5 + 15; // + rng_.gaussian(2.5);
-		targets_[i].cy_ = cy; // + 5 + 15; // + rng_.gaussian(2.5);
+		targets_[i].cx_ = cx + 5; // + 5 + 15; // + rng_.gaussian(2.5);
+		targets_[i].cy_ = cy + 5; // + 5 + 15; // + rng_.gaussian(2.5);
 		targets_[i].width_ = w;
 		targets_[i].height_ = h;
 		targets_[i].score_ = score;
@@ -696,8 +696,8 @@ void Tracker::run_rjmcmc_sampling(std::vector<Target> targets, cv::Mat confidenc
 	}
 
 	// just keep the mean sample
-	samples_.clear();
-	samples_.push_back(get_mean_sample());
+	// samples_.clear();
+	// samples_.push_back(get_mean_sample());
 }
 
 // Hungarian algorithm for data association
