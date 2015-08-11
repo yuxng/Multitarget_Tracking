@@ -18,6 +18,20 @@ int main(int argc, char** argv)
 
 	tracker.initialize_tracker();
 
+	for(int i = 3; (i < argc) && ((argv[i])[0] == '-'); i++)
+	{
+	    switch ((argv[i])[1])
+	    {
+	    	case 'e':
+	    		i++;
+	    		tracker.set_std_noise(atof(argv[i]));
+	    		break;
+	    	default:
+	    		printf("\nUnrecognized option %s!\n\n",argv[i]);
+	            exit(0);
+	    }
+	}
+
 	// process each frame
 	while(tracker.is_the_end() == false)
 	{

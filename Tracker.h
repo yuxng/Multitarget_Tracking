@@ -34,6 +34,8 @@ public:
 	void process_frame();
 	void next_frame();
 
+	void set_std_noise(float std);
+
 	float get_sample_target(int id, Target &target);
 	float sample_location(Target target, Target &target_sample);
 	float target_overlap(Target t1, Target t2);
@@ -74,6 +76,9 @@ private:
 
 	PARAMETER parameter_;
 	cv::RNG rng_;	// random number generator
+
+	// std of Gaussian noise
+	float std_noise_;
 
 	std::ofstream result_file_;
 };

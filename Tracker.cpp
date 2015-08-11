@@ -58,6 +58,7 @@ void Tracker::read_confidence_paths(const char *filename)
 void Tracker::initialize_tracker()
 {
 	target_id_ = 0;
+	std_noise_ = 0;
 	image_path_iterator_ = image_paths_.begin();
 	confidence_path_iterator_ = confidence_paths_.begin();
 
@@ -96,6 +97,13 @@ void Tracker::initialize_tracker()
 	std::system(cmd.c_str());
 	cmd = "rm " + parameter_.dir_tracking + "*";
 	std::system(cmd.c_str());
+}
+
+
+// set the std of Gaussian noise
+void Tracker::set_std_noise(float std)
+{
+	std_noise_ = std;
 }
 
 
@@ -672,8 +680,8 @@ void Tracker::run_rjmcmc_sampling(std::vector<Target> targets, cv::Mat confidenc
 		if(sigmah == 0)
 			sigmah = parameter_.sigma_det_y * h;
 
-		targets_[i].cx_ = cx + 5; // + 5 + 15; // + rng_.gaussian(2.5);
-		targets_[i].cy_ = cy + 5; // + 5 + 15; // + rng_.gaussian(2.5);
+		targets_[i].cx_ = cx + 5 + rng_.gaussian(std_noise_); // + 5 + 15; // + rng_.gaussian(2.5);
+		targets_[i].cy_ = cy + 5 + rng_.gaussian(std_noise_); // + 5 + 15; // + rng_.gaussian(2.5);
 		targets_[i].width_ = w;
 		targets_[i].height_ = h;
 		targets_[i].score_ = score;
